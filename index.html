@@ -57,7 +57,7 @@
       </div>
     </div>
 
-    <!-- 환율 계산 탭 -->
+    <!-- 탭1: 환율 계산 -->
     <section id="tab-fx" class="section active">
       <div class="row">
         <div>
@@ -98,7 +98,7 @@
       </div>
     </section>
 
-    <!-- 패키지 계산 탭 -->
+    <!-- 탭2: 패키지 계산 -->
     <section id="tab-pkg" class="section">
       <div class="row">
         <div>
@@ -132,7 +132,101 @@
   </div>
 
   <script>
-    // 기존 JS 그대로 유지
+    /* ========= 탭 전환 ========= */
+    const $ = (s)=>document.querySelector(s);
+    const $$ = (s)=>[...document.querySelectorAll(s)];
+    $$('.tabbtn').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        $$('.tabbtn').forEach(b=>b.classList.remove('active'));
+        $$('.section').forEach(s=>s.classList.remove('active'));
+        btn.classList.add('active');
+        $('#tab-'+btn.dataset.tab).classList.add('active');
+      });
+    });
+
+    /* ========= 공통: 환율 ========= */
+    const rate=$('#rate'), fetchBtn=$('#fetchBtn'), lastUpdated=$('#lastUpdated');
+    const toNum=v=>Number(String(v||'').replace(/[,\s]/g,''))||0;
+    const fmt=(n,d=0)=>isFinite(n)?Number(n).toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d}):'-';
+    const pad2=n=>n<10?'0'+n:n;
+    const fmtDate=ts=>{const d=new Date(ts);return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;}
+    const setLastUpdated=(ts,src='자동')=>{localStorage.setItem('jpy_lastRateUpdatedAt',ts);lastUpdated.textContent=`업데이트 시각: ${fmtDate(ts)} (${src})`;};
+    const loadLastUpdated=()=>{const ts=localStorage.getItem('jpy_lastRateUpdatedAt');lastUpdated.textContent=ts?`업데이트 시각: ${fmtDate(ts)}`:'업데이트 시각: -';};
+
+    async function fetchRateSmart(){
+      async function tryUrl(u){const r=await fetch(u,{cache:'no-store'}); if(!r.ok) throw 0; const j=await r.json(); const v=j?.rates?.KRW||0; if(!v) throw 0; return v;}
+      try { return await tryUrl('https://api.exchangerate.host/latest?base=JPY&symbols=KRW'); } catch(e){}
+      try { return await tryUrl('https://open.er-api.com/v6/latest/JPY'); } catch(e){}
+      return await tryUrl('https://api.allorigins.win/raw?url='+encodeURIComponent('https://api.exchangerate.host/latest?base=JPY&symbols=KRW'));
+    }
+    fetchBtn.onclick=async()=>{const t=fetchBtn.textContent;fetchBtn.disabled=true;fetchBtn.textContent='불러오는 중...';
+      try{const v=await fetchRateSmart();rate.value=Number(v).toFixed(4);localStorage.setItem('jpy_lastRate',rate.value);setLastUpdated(new Date().toISOString(),'자동');calcFx();calcPkg();}
+      catch(e){alert('환율을 가져오지 못했습니다. 네트워크 상태를 확인해주세요.');}
+      fetchBtn.disabled=false;fetchBtn.textContent=t;
+    };
+
+    /* ========= 탭1: 환율 계산 ========= */
+    const direction=$('#direction'), decimals=$('#decimals'), amount=$('#amount'), fee=$('#fee'), result=$('#result'), amtLabel=$('#amtLabel');
+    function updateLabels(){ amtLabel.textContent=(direction.value==='jpy2krw')?'(엔)':'(원)'; }
+    function calcFx(){
+      const r=toNum(rate.value), amt=toNum(amount.value), f=toNum(fee.value)/100, d=+decimals.value;
+      if(!(r>0&&amt>0)){ result.value=''; return; }
+      const out=(direction.value==='jpy2krw')? amt*r*(1+(isFinite(f)?f:0)) : amt/r/(1+(isFinite(f)?f:0));
+      result.value = `${fmt(out,d)} ${direction.value==='jpy2krw'?'원':'엔'}`;
+    }
+    [direction,decimals].forEach(e=>e.addEventListener('change',()=>{updateLabels();calcFx();}));
+    [amount,fee,rate].forEach(e=>e.addEventListener('input',calcFx));
+    $('#copyBtn').onclick=async()=>{ if(result.value) await navigator.clipboard.writeText(result.value); };
+    $('#swapBtn').onclick=()=>{ direction.value=(direction.value==='jpy2krw')?'krw2jpy':'jpy2krw'; updateLabels(); calcFx(); };
+    $('#resetBtn').onclick=()=>{ amount.value=''; fee.value=''; result.value=''; };
+
+    /* ========= 탭2: 패키지 계산 ========= */
+    const baselinePpu=$('#baselinePpu'), pkgPrice=$('#pkgPrice'), pkgQty=$('#pkgQty'), pkgExtras=$('#pkgExtras');
+    const vBasePpu=$('#vBasePpu'), vEffPpu=$('#vEffPpu'), vSaveAbs=$('#vSaveAbs'), vSavePct=$('#vSavePct'), flag=$('#flag');
+    const vBasePpuKrw=$('#vBasePpuKrw'), vEffPpuKrw=$('#vEffPpuKrw');
+    function calcPkg(){
+      const base=toNum(baselinePpu.value);
+      const price=toNum(pkgPrice.value), qty=toNum(pkgQty.value), extras=toNum(pkgExtras.value);
+      if(!(base>0 && price>0 && qty>0)){ vBasePpu.textContent='-'; vEffPpu.textContent='-'; vSaveAbs.textContent='-'; vSavePct.textContent='-'; vBasePpuKrw.textContent=vEffPpuKrw.textContent='-'; flag.textContent=''; flag.className='flag'; return; }
+      const eff=(price-extras)/qty;
+      vBasePpu.textContent=fmt(base,2);
+      vEffPpu.textContent=fmt(eff,2);
+      const savePer = base - eff;           // +면 이득
+      vSaveAbs.textContent = fmt(savePer*qty,0);
+      vSavePct.textContent = fmt((savePer/base)*100,1);
+      flag.className='flag '+(savePer>0?'good':(Math.abs(savePer)<=0.01?'warn':'bad'));
+      flag.textContent = savePer>0?'이득':(Math.abs(savePer)<=0.01?'비슷':'비효율');
+
+      const r=toNum(rate.value);
+      if(r>0){ vBasePpuKrw.textContent=fmt(base*r,0); vEffPpuKrw.textContent=fmt(eff*r,0); }
+      else { vBasePpuKrw.textContent=vEffPpuKrw.textContent='-'; }
+    }
+    [baselinePpu,pkgPrice,pkgQty,pkgExtras,rate].forEach(el=>el.addEventListener('input',calcPkg));
+
+    /* ========= SW: 자동 업데이트 ========= */
+    if('serviceWorker' in navigator){
+      window.addEventListener('load', async ()=>{
+        const reg = await navigator.serviceWorker.register('./sw.js');
+        navigator.serviceWorker.addEventListener('message', e=>{
+          if(e.data && e.data.type==='NEW_VERSION_READY') setTimeout(()=>location.reload(),200);
+        });
+        navigator.serviceWorker.addEventListener('controllerchange', ()=> setTimeout(()=>location.reload(),200));
+        reg.update().catch(()=>{});
+        setInterval(()=>reg.update().catch(()=>{}), 30*60*1000);
+      });
+    }
+
+    /* ========= 초기화 ========= */
+    (function init(){
+      const cached=localStorage.getItem('jpy_lastRate'); rate.value=cached || '9.50'; loadLastUpdated();
+      updateLabels(); calcFx();
+      baselinePpu.value = localStorage.getItem('jpy_baselinePpu') || '58.82';
+      ['baselinePpu','pkgPrice','pkgQty','pkgExtras'].forEach(id=>{
+        const el=$('#'+id); const v=localStorage.getItem('jpy_'+id); if(v) el.value=v;
+        el.addEventListener('input', ()=> localStorage.setItem('jpy_'+id, el.value));
+      });
+      calcPkg();
+    })();
   </script>
 </body>
 </html>
