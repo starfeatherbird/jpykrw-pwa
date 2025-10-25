@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>JPY ↔ KRW 계산기</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1976d2">
+  <link rel="icon" href="icon-192.png" sizes="192x192">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <style>
+    :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, Apple SD Gothic Neo, "Noto Sans KR", sans-serif; }
+    body { margin: 0; padding: 24px; background: #fafafa; color: #222; }
+    .card { max-width: 680px; margin: 0 auto; background: #fff; border-radius: 16px; padding: 20px; box-shadow: 0 6px 20px rgba(0,0,0,.08); }
+    h1 { font-size: 20px; margin: 0 0 12px; }
+    .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 12px 0; }
+    .full { grid-column: 1 / -1; }
+    label { font-size: 12px; color: #555; margin-bottom: 6px; display: block; }
+    input, select { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 10px; font-size: 16px; background: #fff; box-sizing: border-box; }
+    .out { background: #f4f6f8; }
+    .muted { color: #666; font-size: 12px; }
+    .btn { padding: 10px 14px; border-radius: 10px; border: 1px solid #ddd; background: #fff; cursor: pointer; white-space: nowrap; }
+    .btn:active { transform: translateY(1px); }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .note { font-size: 12px; color: #555; line-height: 1.6; }
+    .pill { font-size: 12px; padding: 4px 8px; border-radius: 999px; border: 1px solid #ddd; background: #f7f7f7; }
+    @media (max-width:480px){ .row { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>엔 ↔ 원 계산기 <span class="pill">PWA · 실시간 환율</span></h1>
+
+    <div class="row">
+      <div>
+        <label>방향</label>
+        <select id="direction">
+          <option value="jpy2krw">엔 ➜ 원 (JPY → KRW)</option>
+          <option value="krw2jpy">원 ➜ 엔 (KRW → JPY)</option>
+        </select>
+      </div>
+      <div>
+        <label>반올림 자릿수</label>
+        <select id="decimals">
+          <option value="0">0자리</option>
+          <option value="1" selected>1자리</option>
+          <option value="2">2자리</option>
+          <option value="3">3자리</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>금액 <span id="amtLabel">(엔)</span></label>
+        <input id="amount" type="text" placeholder="예: 10,000" inputmode="decimal" />
+      </div>
+      <div>
+        <label>환율 (원/엔)</label>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <input id="rate" type="text" placeholder="예: 9.50" inputmode="decimal" style="flex: 1 1 60%;" />
+          <button class="btn" id="fetchBtn" type="button">실시간 환율</button>
+        </div>
+        <div class="muted">예: 1 JPY = 9.50 KRW 라면 9.50 입력</div>
+        <div class="muted" id="lastUpdated">업데이트 시각: -</div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>수수료(%) — 선택</label>
+        <input id="fee" type="text" placeholder="예: 1.8" inputmode="decimal" />
+        <div class="muted">환전/카드 스프레드가 있다면 입력(없으면 비워두기)</div>
+      </div>
+      <div class="full">
+        <label>결과</label>
+        <input id="result" class="out" type="text" readonly />
+        <div class="actions">
+          <button class="btn" id="copyBtn">결과 복사</button>
+          <button class="btn" id="swapBtn">방향 바꾸기</button>
+          <button class="btn" id="resetBtn">초기화</button>
+        </div>
+      </div>
+    </div>
+
+    <p class="note">
+      • “실시간 환율”은 <code>exchangerate.host</code> → 실패 시 <code>open.er-api.com</code> → 둘 다 실패 시 <code>allorigins.win</code> 프록시 순으로 시도합니다.<br/>
+      • 오프라인 시에도 마지막으로 성공한 환율과 페이지가 캐시됩니다(PWA 서비스워커).<br/>
+      • 수수료(%)로 현장 체감 환율을 보정할 수 있습니다.
+    </p>
+  </div>
+
+  <script>
+    // PWA: 서비스워커 등록 + 새 버전 감지 시 자동 새로고침
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', async () => {
+        const reg = await navigator.serviceWorker.register('./sw.js');
+        navigator.serviceWorker.addEventListener('message', (evt) => {
+          if (evt.data && evt.data.type === 'NEW_VERSION_READY') setTimeout(() => window.location.reload(), 200);
+        });
+        navigator.serviceWorker.addEventListener('controllerchange', () => setTimeout(() => window.location.reload(), 200));
+      });
+    }
+
+    const el = (id) => document.getElementById(id);
+    const direction = el('direction'), decimals = el('decimals'),
+          amount = el('amount'), rate = el('rate'), fee = el('fee'),
+          result = el('result'), amtLabel = el('amtLabel'),
+          copyBtn = el('copyBtn'), swapBtn = el('swapBtn'),
+          resetBtn = el('resetBtn'), fetchBtn = el('fetchBtn'),
+          lastUpdatedEl = el('lastUpdated');
+
+    const fmtNumber = (num, dec) => isFinite(num) ? Number(num.toFixed(dec)).toLocaleString() : '';
+    const toNumber = (v) => Number((v || '').replace(/[,\s]/g, '')) || 0;
+    const pad2 = (n) => (n < 10 ? '0' + n : '' + n);
+    const fmtDate = (ts) => { const d = new Date(ts); return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`; };
+    const setLastUpdated = (ts, src='자동') => { localStorage.setItem('jpy_lastRateUpdatedAt', ts); localStorage.setItem('jpy_lastRateSource', src); lastUpdatedEl.textContent = `업데이트 시각: ${fmtDate(ts)} (${src})`; };
+    const loadLastUpdated = () => { const t = localStorage.getItem('jpy_lastRateUpdatedAt'); const s = localStorage.getItem('jpy_lastRateSource') || '자동'; lastUpdatedEl.textContent = t ? `업데이트 시각: ${fmtDate(t)} (${s})` : '업데이트 시각: -'; };
+
+    function updateLabels(){ amtLabel.textContent = (direction.value==='jpy2krw') ? '(엔)' : '(원)'; }
+    function calc(){
+      const amt=toNumber(amount.value), r=toNumber(rate.value), f=toNumber(fee.value)/100, d=+decimals.value;
+      if(amt<=0||r<=0){ result.value=''; return;}
+      let out=(direction.value==='jpy2krw')? amt*r*(1+(isFinite(f)?f:0)) : amt/r/(1+(isFinite(f)?f:0));
+      result.value=fmtNumber(out,d)+' '+((direction.value==='jpy2krw')?'원':'엔');
+    }
+
+    [direction, decimals].forEach(e=>e.addEventListener('change',()=>{updateLabels();calc();}));
+    [amount, fee].forEach(e=>e.addEventListener('input',calc));
+    rate.addEventListener('input',()=>{calc();if(rate.value.trim()){localStorage.setItem('jpy_lastRate',rate.value);setLastUpdated(new Date().toISOString(),'수동');}});
+    copyBtn.onclick=async()=>{if(!result.value)return;await navigator.clipboard.writeText(result.value);copyBtn.textContent='복사됨!';setTimeout(()=>copyBtn.textContent='결과 복사',1000);};
+    swapBtn.onclick=()=>{direction.value=(direction.value==='jpy2krw')?'krw2jpy':'jpy2krw';updateLabels();calc();};
+    resetBtn.onclick=()=>{amount.value='';fee.value='';result.value='';};
+
+    async function fetchRate(){
+      try{
+        const urls=[
+          'https://api.exchangerate.host/latest?base=JPY&symbols=KRW',
+          'https://open.er-api.com/v6/latest/JPY',
+          'https://api.allorigins.win/raw?url='+encodeURIComponent('https://api.exchangerate.host/latest?base=JPY&symbols=KRW')
+        ];
+        for(const u of urls){
+          const r=await fetch(u,{cache:'no-store'}); if(!r.ok) continue;
+          const j=await r.json(); const v=j?.rates?.KRW;
+          if(v){ rate.value=v.toFixed(4); localStorage.setItem('jpy_lastRate',rate.value); setLastUpdated(new Date().toISOString(),'자동'); calc(); return;}
+        }
+        throw new Error();
+      }catch(e){ alert('환율을 가져오지 못했습니다. 네트워크 상태를 확인해주세요.'); }
+    }
+    fetchBtn.onclick=async()=>{fetchBtn.disabled=true;const t=fetchBtn.textContent;fetchBtn.textContent='불러오는 중...';await fetchRate();fetchBtn.textContent=t;fetchBtn.disabled=false;};
+
+    const cached=localStorage.getItem('jpy_lastRate');
+    rate.value=cached||'9.5000'; decimals.value='1'; updateLabels(); loadLastUpdated(); calc();
+  </script>
+</body>
+</html>
