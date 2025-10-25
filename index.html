@@ -1,208 +1,258 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>엔 ↔ 원 계산기 (JPY↔KRW 환율 · 패키지 가치)</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>엔 ↔ 원 계산기 (JPY↔KRW · 패키지 가치)</title>
   <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#2196f3">
+  <link rel="icon" href="icon-192.png" sizes="192x192">
+  <link rel="apple-touch-icon" href="icon-192.png">
   <style>
-    body { font-family: "Segoe UI", sans-serif; background:#fafafa; margin:0; padding:2rem; }
-    h1 { font-size:1.8rem; margin-bottom:0.5rem; }
-    .tab { margin:1rem 0; }
-    .tab button { padding:0.5rem 1rem; border:1px solid #ccc; background:#fff; cursor:pointer; border-radius:5px; }
-    .tab button.active { background:#0066cc; color:#fff; }
-    .section { display:none; margin-top:1rem; }
-    .section.active { display:block; }
-    input, select { padding:0.4rem; border:1px solid #ccc; border-radius:5px; }
-    .row { margin:0.6rem 0; }
-    .kpi { margin-top:1rem; background:#f6f8fa; padding:0.8rem; border-radius:6px; display:flex; flex-wrap:wrap; gap:1rem; }
-    .kpi div { padding:0.3rem 0.6rem; background:#fff; border-radius:5px; box-shadow:0 0 2px #ccc; }
-    .muted { color:#666; font-size:0.85rem; }
-    button { cursor:pointer; }
+    :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, Apple SD Gothic Neo, "Noto Sans KR", sans-serif; }
+    body { margin: 0; padding: 24px; background: #fafafa; color: #222; }
+    .card { max-width: 680px; margin: 0 auto; background: #fff; border-radius: 16px; padding: 20px; box-shadow: 0 6px 20px rgba(0,0,0,.08); }
+    h1 { font-size: 20px; margin: 0 0 12px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .pill { font-size: 12px; padding: 4px 8px; border-radius: 999px; border: 1px solid #ddd; background: #f7f7f7; }
+    .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 12px 0; }
+    .full { grid-column: 1 / -1; }
+    label { font-size: 12px; color: #555; margin-bottom: 6px; display: block; }
+    input, select { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 10px; font-size: 16px; background: #fff; box-sizing: border-box; }
+    .out { background: #f4f6f8; }
+    .muted { color: #666; font-size: 12px; }
+    .btn { padding: 10px 14px; border-radius: 10px; border: 1px solid #ddd; background: #fff; cursor: pointer; white-space: nowrap; }
+    .btn:active { transform: translateY(1px); }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .note { font-size: 12px; color: #555; line-height: 1.6; }
+
+    /* 탭 버튼을 THB 스타일에 맞게 심플하게 */
+    .tabs { display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap; }
+    .tabbtn { padding:10px 14px; border:1px solid #ddd; background:#fff; border-radius:10px; cursor:pointer; }
+    .tabbtn.active { background:#eaf2ff; border-color:#b6d0ff; }
+
+    /* KPI 칩 */
+    .kpis { display:flex; flex-wrap:wrap; gap:12px; margin-top:8px; }
+    .kpi { background:#f4f6f8; border:1px solid #e6e9ee; padding:10px 12px; border-radius:10px; font-size:14px; }
+
+    @media (max-width:480px){
+      .row { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
-  <div class="page">
-    <div class="card">
+  <div class="card">
+    <h1>엔 ↔ 원 계산기 <span class="pill">PWA · 실시간 환율</span> <span class="pill">패키지 가치</span></h1>
 
-  <h1>엔 ↔ 원 계산기 <span class="muted">PWA · 실시간 환율</span> <span class="muted">· 패키지 가치</span></h1>
+    <!-- 탭 -->
+    <div class="tabs">
+      <button class="tabbtn active" data-tab="fx">환율 계산</button>
+      <button class="tabbtn" data-tab="pkg">패키지 계산</button>
+    </div>
 
-  <div class="tab">
-    <button id="tabExchange" class="active">환율 계산</button>
-    <button id="tabPackage">패키지 계산</button>
-  </div>
-
-  <!-- 환율 계산 섹션 -->
-  <div id="exchangeSection" class="section active">
+    <!-- 공통: 환율 입력 -->
     <div class="row">
-      <label>환율 (원/엔)</label>
-      <input id="rate" placeholder="예: 9.50">
-      <button onclick="getRate()">실시간 환율</button>
+      <div class="full">
+        <label>환율 (원/엔)</label>
+        <div style="display:flex; gap:8px;">
+          <input id="rate" type="text" placeholder="예: 9.50" inputmode="decimal" style="flex:1;">
+          <button class="btn" id="btnFetch">실시간 환율</button>
+        </div>
+        <div class="muted">예: 1 JPY = 9.50 KRW 라면 9.50 입력 · <span id="lastUpdated">업데이트 시각: -</span></div>
+      </div>
     </div>
 
-    <p class="muted" id="rateInfo">예: 1 JPY = 9.50 KRW 라면 9.50 입력 · 업데이트 시각: -</p>
+    <!-- 탭: 환율 계산 -->
+    <section id="tab-fx" class="section" style="display:block;">
+      <div class="row">
+        <div>
+          <label>방향</label>
+          <select id="direction">
+            <option value="jpy2krw">엔 ➜ 원 (JPY → KRW)</option>
+            <option value="krw2jpy">원 ➜ 엔 (KRW → JPY)</option>
+          </select>
+        </div>
+        <div>
+          <label>반올림 자릿수</label>
+          <select id="decimals">
+            <option value="0">0자리</option>
+            <option value="1" selected>1자리</option>
+            <option value="2">2자리</option>
+            <option value="3">3자리</option>
+          </select>
+        </div>
+      </div>
 
-    <div class="row">
-      <label>방향</label>
-      <select id="direction">
-        <option value="JPY2KRW">엔 ➜ 원 (JPY → KRW)</option>
-        <option value="KRW2JPY">원 ➜ 엔 (KRW → JPY)</option>
-      </select>
+      <div class="row">
+        <div>
+          <label>금액 <span id="amtLabel">(엔)</span></label>
+          <input id="amount" type="text" placeholder="예: 10,000" inputmode="decimal" />
+        </div>
+        <div>
+          <label>수수료(%) — 선택</label>
+          <input id="fee" type="text" placeholder="예: 1.8" inputmode="decimal" />
+          <div class="muted">환전/카드 스프레드가 있으면 입력(없으면 비워두기)</div>
+        </div>
+        <div class="full">
+          <label>결과</label>
+          <input id="result" class="out" type="text" readonly />
+          <div class="actions">
+            <button class="btn" id="btnCopy">결과 복사</button>
+            <button class="btn" id="btnSwap">방향 바꾸기</button>
+            <button class="btn" id="btnReset">초기화</button>
+          </div>
+        </div>
+      </div>
+    </section>
 
-      <label>반올림 자릿수</label>
-      <select id="digits">
-        <option value="0">0자리</option>
-        <option value="1" selected>1자리</option>
-        <option value="2">2자리</option>
-      </select>
-    </div>
+    <!-- 탭: 패키지 계산 -->
+    <section id="tab-pkg" class="section" style="display:none;">
+      <div class="row">
+        <div>
+          <label>정가 기준 최저 1개당 가격 (￥)</label>
+          <input id="basePpu" type="text" placeholder="예: 58.82 (85개/￥5000)" inputmode="decimal" />
+        </div>
+      </div>
 
-    <div class="row">
-      <label>금액 (엔)</label>
-      <input id="amount" placeholder="예: 10,000">
-      <label>수수료(%)</label>
-      <input id="fee" placeholder="예: 1.8">
-    </div>
+      <div class="row">
+        <div>
+          <label>패키지 가격 (￥)</label>
+          <input id="pkgPrice" type="text" placeholder="예: 2400" inputmode="decimal" />
+        </div>
+        <div>
+          <label>유료재화 개수 (마법석)</label>
+          <input id="pkgQty" type="text" placeholder="예: 20" inputmode="decimal" />
+          <div class="muted">(마법석)</div>
+        </div>
+        <div>
+          <label>추가 보상 추정가 (￥) — 선택</label>
+          <input id="pkgExtras" type="text" placeholder="예: 0 (확정캐릭 가치)" inputmode="decimal" />
+        </div>
+      </div>
 
-    <div class="row">
-      <label>결과</label>
-      <input id="result" readonly>
-    </div>
+      <div class="kpis">
+        <div class="kpi"><b>정가 1개당:</b> <span id="vBase">-</span> ￥</div>
+        <div class="kpi"><b>패키지 1개당 실효가:</b> <span id="vEff">-</span> ￥</div>
+        <div class="kpi"><b>절감액:</b> <span id="vSaveAbs">-</span> ￥ / <span id="vSavePct">-</span>%</div>
+        <div class="kpi"><b>확정캐릭 추정 가치:</b> <span id="vImplied">-</span> ￥</div>
+      </div>
 
-    <div>
-      <button onclick="copyResult()">결과 복사</button>
-      <button onclick="swap()">방향 바꾸기</button>
-      <button onclick="resetAll()">초기화</button>
-    </div>
+      <div class="kpis">
+        <div class="kpi"><b>원화 기준</b> · 정가 <span id="vBaseKrw">-</span>원 vs 패키지 <span id="vEffKrw">-</span>원 (1개당)</div>
+      </div>
 
-    <p class="muted">· 환율 자동 갱신 · 오프라인 시 마지막 값 캐시 · 새 버전 자동 적용</p>
-  </div>
+      <p class="note">※ “추정 캐릭 가치” = 패키지 가격 − (정가 1개당 × 유료재화 개수) 로 계산됩니다.</p>
+    </section>
 
-  <!-- 패키지 가치 계산 섹션 -->
-  <div id="packageSection" class="section">
-    <div class="row">
-      <label>패키지 가격 (¥)</label>
-      <input id="pkgPrice" placeholder="예: 2400">
-      <label>유료재화 개수 (마법석)</label>
-      <input id="pkgQty" placeholder="예: 20">
-    </div>
-
-    <div class="row">
-      <label>추가 보상 추정가 (¥)</label>
-      <input id="pkgExtra" placeholder="예: 0 (확정캐릭 가치)">
-    </div>
-
-    <div class="kpi">
-      <div><b>정가 1개당</b>: <span id="vBasePpu">-</span> ¥</div>
-      <div><b>패키지 1개당 실효가</b>: <span id="vEffPpu">-</span> ¥</div>
-      <div><b>절감액</b>: <span id="vSave">-</span></div>
-      <div><b>확정캐릭 추정 가치</b>: <span id="vImpliedExtras">-</span> ¥</div>
-    </div>
-
-    <p class="muted">※ "추정 캐릭 가치"는 패키지 가격 − (정가 × 유료재화 개수)로 계산됩니다.</p>
+    <p class="note">• 실시간 환율은 exchangerate.host → 실패 시 open.er-api.com → 둘 다 실패 시 allorigins.win 프록시 순으로 시도합니다.<br>
+    • 오프라인 시에도 마지막으로 성공한 환율과 페이지가 캐시됩니다(PWA 서비스워커).<br>
+    • 수수료(%)로 현장 체감 환율을 보정할 수 있습니다.</p>
   </div>
 
   <script>
-    // 탭 전환
-    const tabExchange = document.getElementById('tabExchange');
-    const tabPackage = document.getElementById('tabPackage');
-    const exchangeSection = document.getElementById('exchangeSection');
-    const packageSection = document.getElementById('packageSection');
+    /* 도우미 */
+    const $ = (s)=>document.querySelector(s);
+    const $$ = (s)=>[...document.querySelectorAll(s)];
+    const toNum = (v)=> Number(String(v||'').replace(/[,\s]/g,'')) || 0;
+    const fmt = (n,d=0)=> isFinite(n)?Number(n).toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d}):'-';
+    const pad2=(n)=>n<10?'0'+n:n;
+    const fmtDate=(ts)=>{const d=new Date(ts);return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;}
 
-    tabExchange.onclick = () => {
-      tabExchange.classList.add('active');
-      tabPackage.classList.remove('active');
-      exchangeSection.classList.add('active');
-      packageSection.classList.remove('active');
-    };
+    /* 탭 전환 */
+    $$('.tabbtn').forEach(b=>b.addEventListener('click',()=>{
+      $$('.tabbtn').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+      $('#tab-fx').style.display = (b.dataset.tab==='fx')?'block':'none';
+      $('#tab-pkg').style.display = (b.dataset.tab==='pkg')?'block':'none';
+    }));
 
-    tabPackage.onclick = () => {
-      tabPackage.classList.add('active');
-      tabExchange.classList.remove('active');
-      packageSection.classList.add('active');
-      exchangeSection.classList.remove('active');
-    };
+    /* 환율 공통 */
+    const rate = $('#rate'), lastUpdated = $('#lastUpdated'), btnFetch = $('#btnFetch');
+    function setLast(ts, src='자동'){ localStorage.setItem('jpy_last_at', ts); lastUpdated.textContent=`업데이트 시각: ${fmtDate(ts)} (${src})`; }
+    (function loadLast(){ const ts = localStorage.getItem('jpy_last_at'); if(ts) lastUpdated.textContent=`업데이트 시각: ${fmtDate(ts)}`; })();
 
-    // 환율 계산
-    function calc() {
-      const r = parseFloat(rate.value);
-      const a = parseFloat(amount.value.replace(/,/g,'')) || 0;
-      const f = parseFloat(fee.value) || 0;
-      const d = parseInt(digits.value);
-      if (!r) return;
-
-      let res = direction.value === 'JPY2KRW' ? a * r : a / r;
-      res *= 1 - f / 100;
-      result.value = res.toFixed(d);
+    async function fetchRateSmart(){
+      async function tryUrl(u){ const r=await fetch(u,{cache:'no-store'}); if(!r.ok) throw 0; const j=await r.json(); const v=j?.rates?.KRW||j?.KRW; if(!v) throw 0; return v; }
+      try { return await tryUrl('https://api.exchangerate.host/latest?base=JPY&symbols=KRW'); } catch(e){}
+      try { return await tryUrl('https://open.er-api.com/v6/latest/JPY'); } catch(e){}
+      return await tryUrl('https://api.allorigins.win/raw?url='+encodeURIComponent('https://api.exchangerate.host/latest?base=JPY&symbols=KRW'));
     }
+    btnFetch.addEventListener('click', async ()=>{
+      const t=btnFetch.textContent; btnFetch.disabled=true; btnFetch.textContent='불러오는 중...';
+      try { const v=await fetchRateSmart(); rate.value=Number(v).toFixed(4); localStorage.setItem('jpy_rate', rate.value); setLast(new Date().toISOString(),'자동'); calcFx(); calcPkg(); }
+      catch(e){ alert('환율을 가져오지 못했습니다. 네트워크 상태를 확인해주세요.'); }
+      btnFetch.disabled=false; btnFetch.textContent=t;
+    });
+    rate.addEventListener('input', ()=>{ localStorage.setItem('jpy_rate', rate.value); calcFx(); calcPkg(); });
 
-    rate.oninput = amount.oninput = fee.oninput = calc;
-    direction.onchange = digits.onchange = calc;
-
-    // 실시간 환율
-    async function getRate() {
-      try {
-        const res = await fetch('https://api.allorigins.win/raw?url=https://open.er-api.com/v6/latest/JPY');
-        const data = await res.json();
-        const krw = data.rates.KRW;
-        rate.value = krw.toFixed(2);
-        document.getElementById('rateInfo').textContent = `예: 1 JPY = ${krw.toFixed(2)} KRW · 업데이트 시각: ${new Date(data.time_last_update_utc).toLocaleString('ko-KR')}`;
-        calc();
-      } catch {
-        alert('환율을 가져오지 못했습니다.');
-      }
+    /* 환율 계산 */
+    const direction=$('#direction'), decimals=$('#decimals'), amount=$('#amount'), fee=$('#fee'), result=$('#result'), amtLabel=$('#amtLabel');
+    function updateLabels(){ amtLabel.textContent=(direction.value==='jpy2krw')?'(엔)':'(원)'; }
+    function calcFx(){
+      const r=toNum(rate.value), a=toNum(amount.value), f=toNum(fee.value)/100, d=+decimals.value;
+      if(!(r>0 && a>0)){ result.value=''; return; }
+      const out = (direction.value==='jpy2krw') ? a*r*(1+(isFinite(f)?f:0)) : a/r/(1+(isFinite(f)?f:0));
+      result.value = `${fmt(out,d)} ${(direction.value==='jpy2krw')?'원':'엔'}`;
     }
+    [direction,decimals].forEach(el=>el.addEventListener('change',()=>{updateLabels();calcFx();}));
+    [amount,fee].forEach(el=>el.addEventListener('input',calcFx));
+    $('#btnCopy').addEventListener('click', async ()=>{ if(result.value) await navigator.clipboard.writeText(result.value); });
+    $('#btnSwap').addEventListener('click', ()=>{ direction.value=(direction.value==='jpy2krw')?'krw2jpy':'jpy2krw'; updateLabels(); calcFx(); });
+    $('#btnReset').addEventListener('click', ()=>{ amount.value=''; fee.value=''; result.value=''; });
 
-    // 기타 기능
-    function copyResult() {
-      navigator.clipboard.writeText(result.value);
-      alert('복사되었습니다!');
+    /* 패키지 계산 */
+    const basePpu=$('#basePpu'), pkgPrice=$('#pkgPrice'), pkgQty=$('#pkgQty'), pkgExtras=$('#pkgExtras');
+    const vBase=$('#vBase'), vEff=$('#vEff'), vSaveAbs=$('#vSaveAbs'), vSavePct=$('#vSavePct'), vImplied=$('#vImplied'), vBaseKrw=$('#vBaseKrw'), vEffKrw=$('#vEffKrw');
+
+    function calcPkg(){
+      const base = toNum(basePpu.value);
+      const price=toNum(pkgPrice.value), qty=toNum(pkgQty.value), extras=toNum(pkgExtras.value);
+      vBase.textContent = base?fmt(base,2):'-';
+      if(!(base>0 && price>0 && qty>0)){ vEff.textContent=vSaveAbs.textContent=vSavePct.textContent=vImplied.textContent='-'; vBaseKrw.textContent=vEffKrw.textContent='-'; return; }
+
+      const eff = (price - extras)/qty;         // 패키지 1개당 실효가
+      vEff.textContent = fmt(eff,2);
+
+      const savePer = base - eff;               // +면 이득
+      vSaveAbs.textContent = fmt(savePer*qty,0);
+      vSavePct.textContent = fmt((savePer/base)*100,1);
+
+      const implied = price - base*qty;         // 확정캐릭 추정 가치
+      vImplied.textContent = fmt(implied,0);
+
+      const r = toNum(rate.value);
+      if(r>0){ vBaseKrw.textContent = fmt(base*r,0); vEffKrw.textContent = fmt(eff*r,0); }
+      else { vBaseKrw.textContent = vEffKrw.textContent = '-'; }
     }
-    function swap() {
-      direction.value = direction.value === 'JPY2KRW' ? 'KRW2JPY' : 'JPY2KRW';
-      calc();
-    }
-    function resetAll() {
-      rate.value = '';
-      amount.value = '';
-      fee.value = '';
-      result.value = '';
-    }
+    [basePpu,pkgPrice,pkgQty,pkgExtras].forEach(el=>el.addEventListener('input',calcPkg));
+    rate.addEventListener('input', calcPkg);
 
-    // 패키지 계산
-    function calcPkg() {
-      const base = 58.82; // 정가 기준 (85개 5000엔)
-      const price = parseFloat(pkgPrice.value) || 0;
-      const qty = parseFloat(pkgQty.value) || 0;
-      const extra = parseFloat(pkgExtra.value) || 0;
-
-      if (!price || !qty) return;
-
-      const eff = (price - extra) / qty;
-      const save = ((base - eff) * qty).toFixed(0);
-      const saveRate = (((base - eff) / base) * 100).toFixed(1);
-      const impliedExtras = price - (base * qty);
-
-      document.getElementById('vBasePpu').textContent = base.toFixed(2);
-      document.getElementById('vEffPpu').textContent = eff.toFixed(2);
-      document.getElementById('vSave').textContent = `${save} ¥ / ${saveRate}%`;
-      document.getElementById('vImpliedExtras').textContent = impliedExtras.toFixed(0);
-    }
-
-    pkgPrice.oninput = pkgQty.oninput = pkgExtra.oninput = calcPkg;
-
-    // 서비스워커 등록 + 자동 새로고침
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', async () => {
+    /* SW 자동 업데이트 */
+    if('serviceWorker' in navigator){
+      window.addEventListener('load', async ()=>{
         const reg = await navigator.serviceWorker.register('./sw.js');
+        navigator.serviceWorker.addEventListener('message', e=>{ if(e.data && e.data.type==='NEW_VERSION_READY') setTimeout(()=>location.reload(),200); });
+        navigator.serviceWorker.addEventListener('controllerchange', ()=> setTimeout(()=>location.reload(),200));
         reg.update().catch(()=>{});
-        setInterval(() => reg.update().catch(()=>{}), 30 * 60 * 1000);
-        navigator.serviceWorker.addEventListener('message', e => {
-          if (e.data.type === 'NEW_VERSION_READY') setTimeout(()=>location.reload(),200);
-        });
-        navigator.serviceWorker.addEventListener('controllerchange', ()=>setTimeout(()=>location.reload(),200));
+        setInterval(()=>reg.update().catch(()=>{}), 30*60*1000);
       });
     }
+
+    /* 초기화 */
+    (function init(){
+      // 환율 복원
+      const cachedRate = localStorage.getItem('jpy_rate');
+      rate.value = cachedRate || '9.50';
+      updateLabels(); calcFx();
+
+      // 패키지 기본값
+      basePpu.value = localStorage.getItem('jpy_base_ppu') || '58.82';
+      ['basePpu','pkgPrice','pkgQty','pkgExtras'].forEach(id=>{
+        const el = document.getElementById(id); const v = localStorage.getItem('jpy_'+id);
+        if(v) el.value = v;
+        el.addEventListener('input', ()=> localStorage.setItem('jpy_'+id, el.value));
+      });
+      calcPkg();
+    })();
   </script>
 </body>
 </html>
