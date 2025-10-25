@@ -110,7 +110,11 @@
 
       <div class="row">
         <div><label>패키지 가격 (￥)</label><input id="pkgPrice" type="text" placeholder="예: 2400" inputmode="decimal" /></div>
-        <div><label>유료재화 개수</label><input id="pkgQty" type="text" placeholder="예: 20" inputmode="decimal" /></div>
+        <div>
+          <label>유료재화 개수</label>
+          <input id="pkgQty" type="text" placeholder="예: 20" inputmode="decimal" />
+          <div class="muted">(마법석)</div>
+        </div>
         <div><label>추가 보상 추정가 (￥)</label><input id="pkgExtras" type="text" placeholder="예: 0 (확정캐릭 가치)" inputmode="decimal" /></div>
       </div>
 
@@ -128,7 +132,7 @@
   </div>
 
   <script>
-    // (JS는 이전 버전 그대로 유지 — 생략 가능)
+    // 기존 JS 그대로 유지
   </script>
 </body>
 </html>
